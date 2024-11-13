@@ -7,9 +7,17 @@ import logging
 app = Flask(__name__)
 CORS(app)  # Enable CORS
 
-# Set up simplified logging
-logging.basicConfig(level=logging.DEBUG,
+# Set up logging
+logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
+
+# Set app logger to DEBUG level
+app.logger.setLevel(logging.DEBUG)
+
+# Suppress debug logging from other modules
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
+logging.getLogger('apify_client').setLevel(logging.WARNING)
 
 API_TOKEN = os.getenv("API_TOKEN")
 API_KEY = os.getenv("MY_API_KEY")
@@ -49,7 +57,7 @@ def run_apify_actor(urls):
         transcript = ' '.join(captions)
         url_transcript_map[url] = transcript
         # Log the transcript once per video
-        app.logger.debug(f"Transcript for {url}:\n{transcript}\n")
+        app.logger.info(f"Transcript for {url}:\n{transcript}\n")
     return url_transcript_map
 
 @app.route('/api', methods=['POST'])
