@@ -6,40 +6,27 @@ import logging
 import traceback
 
 app = Flask(__name__)
-
-# Configure CORS to allow requests from any origin (adjust in production)
 CORS(app, resources={r"/api": {"origins": "*"}})
-
-# Set up logging
 logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s %(levelname)s [%(name)s] %(message)s')
-
-# Set app logger to DEBUG level
 app.logger.setLevel(logging.DEBUG)
 
 # Suppress debug logging from other modules
 for logger_name in ('httpx', 'httpcore', 'apify_client'):
     logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-# Retrieve environment variables
 API_TOKEN = os.getenv("API_TOKEN")
 API_KEY = os.getenv("MY_API_KEY")
 
-if not API_TOKEN or not API_KEY:
-    app.logger.error("API_TOKEN or MY_API_KEY environment variables not set.")
-    # Optionally, raise an exception or exit if these are critical
-
-# Function to handle Apify actor calls
 def run_apify_actor(urls):
     app.logger.debug(f"run_apify_actor started for URLs: {urls}")
     client = ApifyClient(API_TOKEN)
     run_input = {
-        "outputFormat": "captions",
         "urls": urls,
-        "maxRetries": 4,
+        "maxRetries": 3,
         "proxyOptions": {"useApifyProxy": True},
     }
-    actor_id = "1s7eXiaukVuOr4Ueg"
+    actor_id = "karamelo/test-youtube-structured-transcript-extractor"
     try:
         app.logger.debug(f"Calling Apify actor '{actor_id}' with input: {run_input}")
         run = client.actor(actor_id).call(run_input=run_input)
@@ -70,8 +57,6 @@ def run_apify_actor(urls):
             captions = item.get('captions', [])
             transcript = ' '.join(captions)
             url_transcript_map[url] = transcript
-
-            # Log concise transcript info
             transcript_preview = transcript[:75].replace('\n', ' ') + '...'
             app.logger.info(f"Transcript for {url}: {transcript_preview}")
         return url_transcript_map, None
