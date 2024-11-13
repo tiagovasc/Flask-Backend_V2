@@ -11,7 +11,7 @@ CORS(app)  # Enable CORS
 logging.basicConfig(level=logging.DEBUG)
 handler = logging.StreamHandler()
 formatter = logging.Formatter(
-    '%(asctime)s %(levelname)s [%(name)s] %(message)s'
+    '%(asctime)s %(levelname)s [%(name)s] URL: %(url)s Message: %(message)s'
 )
 handler.setFormatter(formatter)
 app.logger.addHandler(handler)
@@ -22,7 +22,7 @@ API_KEY = os.getenv("MY_API_KEY")
 
 # Function to handle Apify actor calls for new API
 def run_apify_actor(urls):
-    app.logger.debug("Starting Apify actor for URLs: %s", urls)
+    app.logger.debug({"url": "N/A", "message": "Starting Apify actor for URLs", "urls": urls})
     client = ApifyClient(API_TOKEN)
     run_input = {
         "outputFormat": "captions",
@@ -31,74 +31,54 @@ def run_apify_actor(urls):
         "proxyOptions": {"useApifyProxy": True},
     }
     actor_id = "1s7eXiaukVuOr4Ueg"
-    app.logger.debug("Running Apify actor with input: %s", run_input)
     run = client.actor(actor_id).call(run_input=run_input)
-    app.logger.debug("Apify actor run details: %s", run)
+    app.logger.debug({"url": "N/A", "message": "Apify actor run details", "details": run})
 
     # Fetch results from the Apify dataset
     results = [item for item in client.dataset(run['defaultDatasetId']).iterate_items()]
-    app.logger.debug("Fetched results from Apify dataset: %s", results)
-    
-    # Process results to map URLs to transcripts
     url_transcript_map = {}
     for item in results:
-        app.logger.debug("Processing item: %s", item)
-        # Attempt to get the 'url' from the item
-        url = item.get('url')
-        if not url:
-            video_id = item.get('videoId')
-            if video_id:
-                url = f"https://www.youtube.com/watch?v={video_id}"
-                app.logger.debug("Constructed URL from videoId: %s", url)
-            else:
-                app.logger.warning("Item without 'url' or 'videoId': %s", item)
-                continue
+        video_id = item.get('videoId')
+        url = f"https://www.youtube.com/watch?v={video_id}" if video_id else "Unknown URL"
+        app.logger.debug({"url": url, "message": "Processing item"})
         captions = item.get('captions', [])
         transcript = ' '.join(captions)
         url_transcript_map[url] = transcript
-        app.logger.debug("Added transcript for URL %s", url)
-    return url_transcript_map
+        app.logger.debug({"url": url, "message": "Transcript processed and stored"})
 
-# Additional function for handling other APIs
-def other_api_logic(data):
-    # Placeholder for other API processing logic
-    app.logger.debug("Processing other API logic with data: %s", data)
-    return {"processed_data": data}
+    # Only log the complete results dictionary if necessary for troubleshooting
+    app.logger.debug({"url": "N/A", "message": "All URLs processed, transcripts stored."})
+    return url_transcript_map
 
 @app.route('/api', methods=['POST'])
 def api_handler():
-    app.logger.debug("Received request with headers: %s", dict(request.headers))
+    received_headers = dict(request.headers)
+    app.logger.debug({"url": "N/A", "message": "Received request", "headers": received_headers})
     data = request.get_json()
-    app.logger.debug("Received data: %s", data)
     function_requested = data.get('function')
-    app.logger.debug("Function requested: %s", function_requested)
+    app.logger.debug({"url": "N/A", "message": "Function requested", "function": function_requested})
 
-    received_api_key = request.headers.get('Authorization')
+    received_api_key = received_headers.get('Authorization')
     if received_api_key != f'Bearer {API_KEY}':
-        app.logger.warning("Unauthorized access attempt with key: %s", received_api_key)
+        app.logger.warning({"url": "N/A", "message": "Unauthorized access attempt", "key": received_api_key})
         return jsonify({"error": "Unauthorized"}), 401
 
     if function_requested == 'run_apify':
         urls = data.get("urls")
-        app.logger.debug("URLs received: %s", urls)
+        app.logger.debug({"url": "N/A", "message": "URLs received", "urls": urls})
         if not urls or not isinstance(urls, list):
-            app.logger.error("Missing 'urls' in request or 'urls' is not a list")
+            app.logger.error({"url": "N/A", "message": "Missing 'urls' in request or 'urls' is not a list"})
             return jsonify({"error": "Missing 'urls' in request or 'urls' is not a list"}), 400
         try:
             results = run_apify_actor(urls)
-            app.logger.debug("Returning results: %s", results)
+            app.logger.debug({"url": "N/A", "message": "Returning results", "urls_processed": list(results.keys())})
             return jsonify({"status": "success", "data": results})
         except Exception as e:
-            app.logger.exception("An error occurred while processing 'run_apify'")
+            app.logger.exception({"url": "N/A", "message": "An error occurred while processing 'run_apify'", "exception": str(e)})
             return jsonify({"error": "An error occurred", "details": str(e)}), 500
 
-    elif function_requested == 'other_api':
-        processed_data = other_api_logic(data)
-        app.logger.debug("Returning processed data: %s", processed_data)
-        return jsonify(processed_data)
-
     else:
-        app.logger.error("Unsupported function: %s", function_requested)
+        app.logger.error({"url": "N/A", "message": "Unsupported function requested", "function": function_requested})
         return jsonify({"error": "Function not supported"}), 400
 
 if __name__ == '__main__':
